@@ -1,0 +1,16 @@
+{
+  "title": "OD-11 (WebSocket)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to OD-11",
+        "data": {
+          "host": "Host (IP or hostname)",
+          "ws_path": "WebSocket path (default: /ws)",
+          "origin": "Origin header (default: http://<host>)",
+          "cookie": "Cookie (orthoplay=...) [optional]"
+        }
+      }
+    }
+  }
+}

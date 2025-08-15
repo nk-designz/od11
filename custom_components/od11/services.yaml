@@ -1,0 +1,49 @@
+volume_set:
+  name: Set Volume
+  description: Set absolute volume 0..100
+  fields:
+    volume:
+      required: true
+      example: 10
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+
+volume_nudge:
+  name: Nudge Volume
+  description: Change volume by delta (+/- int)
+  fields:
+    amount:
+      required: true
+      example: -1
+      selector:
+        number:
+          min: -100
+          max: 100
+          step: 1
+          mode: box
+
+set_input:
+  name: Set Input (auto)
+  description: Set input by id/name/alias (e.g. 'optical', 'b' for bluetooth)
+  fields:
+    source:
+      required: true
+      example: optical
+      selector:
+        text:
+
+set_input_airplay:
+  name: Set Input AirPlay
+set_input_spotify:
+  name: Set Input Spotify
+set_input_playlist:
+  name: Set Input Playlist
+set_input_linein:
+  name: Set Input Line in
+set_input_optical:
+  name: Set Input Optical
+set_input_bluetooth:
+  name: Set Input Bluetooth

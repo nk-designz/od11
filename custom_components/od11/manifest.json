@@ -1,0 +1,11 @@
+{
+  "domain": "od11",
+  "name": "OD-11 (WebSocket, Input & Volume only)",
+  "codeowners": ["@you"],
+  "version": "0.1.0",
+  "documentation": "https://github.com/your/repo",
+  "iot_class": "local_push",
+  "requirements": [],
+  "config_flow": true,
+  "loggers": ["custom_components.od11"]
+}
