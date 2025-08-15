@@ -1,25 +1,41 @@
 from __future__ import annotations
 
-import aiohttp
-from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.core import HomeAssistant
+import voluptuous as vol
+from functools import partial
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import DOMAIN, DEFAULT_WS_PATH
+from .const import DOMAIN
 from .websocket_client import Od11Client
 from .coordinator import Od11Coordinator
 
 PLATFORMS = ["number", "select"]
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    host = entry.data["host"]
-    ws_path = entry.data.get("ws_path", DEFAULT_WS_PATH)
-    origin = entry.data.get("origin") or f"http://{host}"
-    cookie = entry.data.get("cookie")
 
-    session = aiohttp.ClientSession()
-    client = Od11Client(session, host=host, ws_path=ws_path, origin=origin, cookie=cookie)
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """YAML setup not used; just return True."""
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up OD-11 from a config entry."""
+    host: str = entry.data["host"]
+    ws_path: str = entry.data.get("ws_path", "/ws")
+    origin: str = entry.data.get("origin") or f"http://{host}"
+    cookie: str | None = entry.data.get("cookie")
+
+    session = aiohttp_client.async_get_clientsession(hass)
+    client = Od11Client(
+        session,
+        host=host,
+        ws_path=ws_path,
+        origin=origin,
+        cookie=cookie,
+    )
     await client.connect()
 
     coord = Od11Coordinator(hass, client)
@@ -39,47 +55,70 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register services
-    async def _vol_set(call):
+    # -------- Services (explicit) --------
+
+    async def svc_volume_set(call: ServiceCall) -> None:
         target = int(call.data["volume"])
         await client.set_volume_absolute(target)
+        await coord.async_request_refresh()
 
-    async def _vol_nudge(call):
+    async def svc_volume_nudge(call: ServiceCall) -> None:
         amt = int(call.data["amount"])
         await client.nudge_volume(amt)
+        await coord.async_request_refresh()
 
-    async def _set_input(call):
+    # Resolve string/id/alias to a source id using the select helper
+    from .select import resolve_source_to_id
+
+    async def svc_set_input(call: ServiceCall) -> None:
         src = str(call.data["source"]).strip().lower()
-        # map name/alias/id using the Select entity helper (exposes map via coordinator)
-        from .select import resolve_source_to_id  # lazy import
         src_id = resolve_source_to_id(coord, src)
         await client.set_input(src_id)
+        await coord.async_request_refresh()
 
-    for srv, schema in (
-        ("volume_set", {"volume": int}),
-        ("volume_nudge", {"amount": int}),
-        ("set_input", {"source": str}),
-    ):
-        hass.services.async_register(DOMAIN, srv, locals()[f"_{srv.replace('od11.','')}"])
-
-    # Convenience services
-    async def _mk_setter(source_key: str):
-        from .select import resolve_source_to_id
-        src_id = resolve_source_to_id(coord, source_key)
+    # Convenience wrappers per input (use partial to avoid late-binding issues)
+    async def _svc_set_input_key(call: ServiceCall, key: str) -> None:
+        src_id = resolve_source_to_id(coord, key)
         await client.set_input(src_id)
+        await coord.async_request_refresh()
+
+    hass.services.async_register(
+        DOMAIN,
+        "volume_set",
+        svc_volume_set,
+        schema=vol.Schema({vol.Required("volume"): vol.All(int, vol.Range(min=0, max=100))}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "volume_nudge",
+        svc_volume_nudge,
+        schema=vol.Schema({vol.Required("amount"): int}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "set_input",
+        svc_set_input,
+        schema=vol.Schema({vol.Required("source"): str}),
+    )
 
     for key in ("airplay", "spotify", "playlist", "linein", "optical", "bluetooth"):
-        hass.services.async_register(DOMAIN, f"set_input_{key}", lambda call, k=key: _mk_setter(k))
+        hass.services.async_register(
+            DOMAIN,
+            f"set_input_{key}",
+            partial(_svc_set_input_key, key=key),
+        )
 
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
     data = hass.data[DOMAIN].pop(entry.entry_id, None)
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["number", "select"])
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
     if data:
         client: Od11Client = data["client"]
-        await client.close()
-        await client._session.close()
+        await client.close()  # WS only; aiohttp session is HA-managed
+
     return unload_ok
 
