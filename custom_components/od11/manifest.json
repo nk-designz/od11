@@ -3,9 +3,11 @@
   "name": "OD-11 (WebSocket, Input & Volume only)",
   "codeowners": ["@you"],
   "version": "0.1.0",
-  "documentation": "https://github.com/your/repo",
+  "documentation": "https://github.com/<youruser>/<yourrepo>",
   "iot_class": "local_push",
-  "requirements": [],
   "config_flow": true,
+  "requirements": [],
+  "homeassistant": "2024.6.0",
   "loggers": ["custom_components.od11"]
 }
+

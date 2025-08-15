@@ -1,0 +1,7 @@
+{
+  "name": "OD-11 (WebSocket, Input & Volume only)",
+  "content_in_root": false,
+  "render_readme": true,
+  "domains": ["od11"],
+  "country": "ALL"
+}
